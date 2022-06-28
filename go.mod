@@ -1,4 +1,4 @@
-module github.com/simpleforce/simpleforce
+module github.com/provectio/simpleforce
 
 go 1.17
 

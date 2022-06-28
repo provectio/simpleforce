@@ -20,7 +20,7 @@ const (
 var (
 	// When updating existing records, certain fields are read only and needs to be removed before submitted to Salesforce.
 	// Following list of fields are extracted from INVALID_FIELD_FOR_INSERT_UPDATE error message.
-	blacklistedUpdateFields = []string{
+	BlacklistedUpdateFields = []string{
 		"LastModifiedDate",
 		"LastReferencedDate",
 		"IsClosed",

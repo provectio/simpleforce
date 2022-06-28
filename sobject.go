@@ -417,7 +417,7 @@ func (obj *SObject) makeCopy() map[string]interface{} {
 		}
 		stripped[key] = val
 	}
-	for _, key := range blacklistedUpdateFields {
+	for _, key := range BlacklistedUpdateFields {
 		delete(stripped, key)
 	}
 	return stripped

@@ -167,10 +167,9 @@ func (obj *SObject) Update() *SObject {
 	url := obj.client().makeURL(queryBase + obj.Type() + "/" + obj.ID())
 	respData, err := obj.client().httpRequest(http.MethodPatch, url, bytes.NewReader(reqData))
 	if err != nil {
-		log.Println(logPrefix, "failed to process http request,", err)
+		log.Println(logPrefix, "failed to process http request,", respData, ",", err)
 		return nil
 	}
-	log.Println(string(respData))
 
 	return obj
 }
@@ -178,8 +177,6 @@ func (obj *SObject) Update() *SObject {
 // Upsert creates SObject or updates existing SObject in place. Upon successful upsert, same SObject is returned for chained access.
 // ID, ExternalIDField and Type are required. ID is the value of the external ID in this case.
 func (obj *SObject) Upsert() *SObject {
-	log.Println(logPrefix, "ExternalID:", obj.ExternalID())
-	log.Println(logPrefix, "ExternalIDField:", obj.ExternalIDFieldName())
 	if obj.Type() == "" || obj.client() == nil || obj.ExternalIDFieldName() == "" ||
 		obj.ExternalID() == "" {
 		// Sanity check.
@@ -237,7 +234,6 @@ func (obj *SObject) Delete(id ...string) error {
 	}
 
 	url := obj.client().makeURL("sobjects/" + obj.Type() + "/" + obj.ID())
-	log.Println(url)
 	_, err := obj.client().httpRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		return err

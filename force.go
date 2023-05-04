@@ -2,6 +2,7 @@ package simpleforce
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -50,18 +52,18 @@ type QueryResult struct {
 
 // Expose sid to save in admin settings
 func (client *Client) GetSid() (sid string) {
-        return client.sessionID
+	return client.sessionID
 }
 
-//Expose Loc to save in admin settings
+// Expose Loc to save in admin settings
 func (client *Client) GetLoc() (loc string) {
 	return client.instanceURL
 }
 
 // Set SID and Loc as a means to log in without LoginPassword
 func (client *Client) SetSidLoc(sid string, loc string) {
-        client.sessionID = sid
-        client.instanceURL = loc
+	client.sessionID = sid
+	client.instanceURL = loc
 }
 
 // Query runs an SOQL query. q could either be the SOQL string or the nextRecordsURL.
@@ -194,7 +196,7 @@ func (client *Client) LoginPassword(username, password, token string) error {
 	respData, err := ioutil.ReadAll(resp.Body)
 
 	if err != nil {
-		log.Println(logPrefix, "error occurred reading response data,", err)
+		return fmt.Errorf("error occurred reading response data: %v", err)
 	}
 
 	var loginResponse struct {
@@ -209,8 +211,7 @@ func (client *Client) LoginPassword(username, password, token string) error {
 
 	err = xml.Unmarshal(respData, &loginResponse)
 	if err != nil {
-		log.Println(logPrefix, "error occurred parsing login response,", err)
-		return err
+		return fmt.Errorf("error occurred parsing login response: %v", err)
 	}
 
 	// Now we should all be good and the sessionID can be used to talk to salesforce further.
@@ -221,7 +222,6 @@ func (client *Client) LoginPassword(username, password, token string) error {
 	client.user.email = loginResponse.UserEmail
 	client.user.fullName = loginResponse.UserFullName
 
-	log.Println(logPrefix, "User", client.user.name, "authenticated.")
 	return nil
 }
 
@@ -287,15 +287,23 @@ func (client *Client) DownloadFile(contentVersionID string, filepath string) err
 	return client.download(apiPath, filepath)
 }
 
+// UploadFile uploads a file in 'filepath' and return 'ContentVersionId'.
+// The file will be uploaded to the user's personal library.
+// Free to link this ContentVersionId to a ContentDocumentLink to share with other users and objects.
+func (client *Client) UploadFile(filepath string) (contentVersionId string, err error) {
+	apiPath := fmt.Sprintf("/services/data/v%s/sobjects/ContentVersion", client.apiVersion)
+	return client.upload(apiPath, filepath)
+}
+
 func (client *Client) DownloadAttachment(attachmentId string, filepath string) error {
 	apiPath := fmt.Sprintf("/services/data/v%s/sobjects/Attachment/%s/Body", client.apiVersion, attachmentId)
 	return client.download(apiPath, filepath)
 }
 
-func (client *Client) download(apiPath string, filepath string) error {
+func (client *Client) download(apiPath string, filePath string) error {
 	// Get the data
 	httpClient := client.httpClient
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", strings.TrimRight(client.instanceURL, "/"), apiPath), nil)
+	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s%s", strings.TrimRight(client.instanceURL, "/"), apiPath), nil)
 	req.Header.Add("Content-Type", "application/json; charset=UTF-8")
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", "Bearer "+client.sessionID)
@@ -313,7 +321,7 @@ func (client *Client) download(apiPath string, filepath string) error {
 	}
 
 	// Create the file
-	out, err := os.Create(filepath)
+	out, err := os.Create(filePath)
 	if err != nil {
 		return err
 	}
@@ -324,6 +332,85 @@ func (client *Client) download(apiPath string, filepath string) error {
 	return err
 }
 
+func (client *Client) upload(apiPath string, filePath string) (ContentVersionId string, err error) {
+	// Upload Data
+	httpClient := client.httpClient
+
+	fileData, err := os.ReadFile(filePath)
+	if err != nil {
+		return
+	}
+
+	filename := filepath.Base(filePath)
+	extension := filepath.Ext(filename)
+	name := filename[0 : len(filename)-len(extension)]
+
+	var body struct {
+		Title           string `json:"Title"`
+		ContentLocation string `json:"ContentLocation"`
+		OwnerId         string `json:"OwnerId"`
+		PathOnClient    string `json:"PathOnClient"`
+		VersionData     string `json:"VersionData"`
+	} = struct {
+		Title           string `json:"Title"`
+		ContentLocation string `json:"ContentLocation"`
+		OwnerId         string `json:"OwnerId"`
+		PathOnClient    string `json:"PathOnClient"`
+		VersionData     string `json:"VersionData"`
+	}{
+		Title:           name,
+		ContentLocation: "S",
+		OwnerId:         client.user.id,
+		PathOnClient:    filePath,
+		VersionData:     base64.StdEncoding.EncodeToString(fileData),
+	}
+
+	bodyData, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s%s", strings.TrimRight(client.instanceURL, "/"), apiPath), bytes.NewReader(bodyData))
+	req.Header.Add("Content-Type", "application/json; charset=UTF-8")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+client.sessionID)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(resp.Body)
+		err = fmt.Errorf("ERROR: statuscode: %d, body: %s", resp.StatusCode, buf.String())
+		return
+	}
+
+	var result struct {
+		Id      string        `json:"id"`
+		Success bool          `json:"success"`
+		Errors  []interface{} `json:"errors"`
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	err = json.Unmarshal(respBody, &result)
+	if err != nil {
+		return
+	} else if !result.Success {
+		err = fmt.Errorf("ERROR: %v", result.Errors)
+	} else {
+		ContentVersionId = result.Id
+	}
+
+	return
+}
+
 func parseHost(input string) string {
 	parsed, err := url.Parse(input)
 	if err == nil {
@@ -332,7 +419,7 @@ func parseHost(input string) string {
 	return "Failed to parse URL input"
 }
 
-//Get the List of all available objects and their metadata for your organization's data
+// Get the List of all available objects and their metadata for your organization's data
 func (client *Client) DescribeGlobal() (*SObjectMeta, error) {
 	apiPath := fmt.Sprintf("/services/data/v%s/sobjects", client.apiVersion)
 	baseURL := strings.TrimRight(client.baseURL, "/")

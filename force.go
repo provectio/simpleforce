@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -88,8 +86,7 @@ func (client *Client) Query(q string) (*QueryResult, error) {
 
 	data, err := client.httpRequest("GET", u, nil)
 	if err != nil {
-		log.Println(logPrefix, "HTTP GET request failed:", u)
-		return nil, err
+		return nil, fmt.Errorf("HTTP GET request (%s) failed: %v", u, err)
 	}
 
 	var result QueryResult
@@ -116,7 +113,7 @@ func (client *Client) ApexREST(method, path string, requestBody io.Reader) ([]by
 
 	data, err := client.httpRequest(method, u, requestBody)
 	if err != nil {
-		log.Println(logPrefix, fmt.Sprintf("HTTP %s request failed:", method), u)
+		err = fmt.Errorf("HTTP %s (%s) request failed: %v", method, u, err)
 		return nil, err
 	}
 
@@ -169,8 +166,7 @@ func (client *Client) LoginPassword(username, password, token string) error {
 	url := fmt.Sprintf("%s/services/Soap/u/%s", client.baseURL, client.apiVersion)
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(soapBody))
 	if err != nil {
-		log.Println(logPrefix, "error occurred creating request,", err)
-		return err
+		return fmt.Errorf("error occurred creating request: %v", err)
 	}
 	req.Header.Add("Content-Type", "text/xml")
 	req.Header.Add("charset", "UTF-8")
@@ -178,22 +174,21 @@ func (client *Client) LoginPassword(username, password, token string) error {
 
 	resp, err := client.httpClient.Do(req)
 	if err != nil {
-		log.Println(logPrefix, "error occurred submitting request,", err)
-		return err
+		return fmt.Errorf("error occurred submitting request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Println(logPrefix, "request failed,", resp.StatusCode)
+		// log.Println(logPrefix, "request failed,", resp.StatusCode)
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(resp.Body)
-		newStr := buf.String()
-		log.Println(logPrefix, "Failed resp.body: ", newStr)
+		// newStr := buf.String()
+		// log.Println(logPrefix, "Failed resp.body: ", newStr)
 		theError := ParseSalesforceError(resp.StatusCode, buf.Bytes())
 		return theError
 	}
 
-	respData, err := ioutil.ReadAll(resp.Body)
+	respData, err := io.ReadAll(resp.Body)
 
 	if err != nil {
 		return fmt.Errorf("error occurred reading response data: %v", err)
@@ -242,16 +237,16 @@ func (client *Client) httpRequest(method, url string, body io.Reader) ([]byte, e
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		log.Println(logPrefix, "request failed,", resp.StatusCode)
+		// log.Println(logPrefix, "request failed,", resp.StatusCode)
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(resp.Body)
-		newStr := buf.String()
+		// newStr := buf.String()
 		theError := ParseSalesforceError(resp.StatusCode, buf.Bytes())
-		log.Println(logPrefix, "Failed resp.body: ", newStr)
+		// log.Println(logPrefix, "Failed resp.body: ", newStr)
 		return nil, theError
 	}
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 // makeURL generates a REST API URL based on baseURL, APIVersion of the client.
@@ -426,6 +421,9 @@ func (client *Client) DescribeGlobal() (*SObjectMeta, error) {
 	url := fmt.Sprintf("%s%s", baseURL, apiPath) // Get the objects
 	httpClient := client.httpClient
 	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error occurred creating request: %v", err)
+	}
 	req.Header.Add("Content-Type", "application/json; charset=UTF-8")
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Authorization", "Bearer "+client.sessionID)
@@ -438,15 +436,14 @@ func (client *Client) DescribeGlobal() (*SObjectMeta, error) {
 
 	var meta SObjectMeta
 
-	respData, err := ioutil.ReadAll(resp.Body)
-	log.Println(logPrefix, fmt.Sprintf("status code %d", resp.StatusCode))
+	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Println(logPrefix, "error while reading all body")
+		return nil, fmt.Errorf("error occurred reading response data: %v", err)
 	}
 
 	err = json.Unmarshal(respData, &meta)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error occurred parsing response: %v", err)
 	}
 	return &meta, nil
 }

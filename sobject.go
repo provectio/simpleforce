@@ -3,6 +3,7 @@ package simpleforce
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -428,12 +429,10 @@ func (obj *SObject) setIDFromResponseData(respData []byte) error {
 	}
 	err := json.Unmarshal(respData, &respVal)
 	if err != nil {
-		log.Println(logPrefix, "failed to process response data,", err)
-		return err
+		return fmt.Errorf("failed to process response data, %v", err)
 	}
 
 	if !respVal.Success || respVal.ID == "" {
-		log.Println(logPrefix, "unsuccessful")
 		return errors.New("request was unsuccessful")
 	}
 

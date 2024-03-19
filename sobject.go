@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -37,8 +38,10 @@ var (
 		"ContactEmail",
 		"ClosedDate",
 		"LastModifiedById",
+	}
 
-		// Specific fields for 'ContentVersion' items
+	// Specific blacklist fields for 'ContentVersion' items
+	BlacklistedUpdateFieldsContentVersion = []string{
 		"Origin",
 		"ContentBodyId",
 		"PathOnClient",
@@ -55,6 +58,7 @@ var (
 		"IsAssetEnabled",
 		"NetworkId",
 		"ContentDocumentId",
+		"ContentSize",
 		"IsLatest",
 		"VersionNumber",
 		"IsMajorVersion",
@@ -295,11 +299,73 @@ func (obj *SObject) ExternalID() string {
 // StringField accesses a field in the SObject as string. Empty string is returned if the field doesn't exist.
 func (obj *SObject) StringField(key string) string {
 	value := obj.InterfaceField(key)
-	switch value.(type) {
+	switch i := value.(type) {
 	case string:
-		return value.(string)
+		return i
 	default:
-		return ""
+		return fmt.Sprint(value)
+	}
+}
+
+// IntField accesses a field in the SObject as int. Empty (0) int is returned if the field doesn't exist.
+func (obj *SObject) IntField(key string) int {
+	value := obj.InterfaceField(key)
+	switch i := value.(type) {
+	case int:
+		return i
+	case float64:
+		return int(i)
+	case string:
+		result, _ := strconv.Atoi(i)
+		return result
+	case bool:
+		if i {
+			return 1
+		} else {
+			return 0
+		}
+	default:
+		return 0
+	}
+}
+
+// BoolField accesses a field in the SObject as bool. False is returned if the field doesn't exist.
+func (obj *SObject) BoolField(key string) bool {
+	value := obj.InterfaceField(key)
+	switch i := value.(type) {
+	case bool:
+		return i
+	case int:
+		return i != 0
+	case float64:
+		return i != 0
+	case string:
+		result, _ := strconv.ParseBool(i)
+		return result
+	default:
+		return false
+	}
+}
+
+// FloatField accesses a field in the SObject as float64. Empty (0) float64 is returned if the field doesn't exist.
+func (obj *SObject) FloatField(key string) float64 {
+	value := obj.InterfaceField(key)
+	switch i := value.(type) {
+	case float64:
+		return i
+	case int:
+		return float64(i)
+	case string:
+		result, _ := strconv.ParseFloat(i, 64)
+		return result
+	case bool:
+		if i {
+			return 1
+		} else {
+			return 0
+		}
+	default:
+		return 0
 	}
 }
 
@@ -439,7 +505,12 @@ func (obj *SObject) makeCopy() map[string]interface{} {
 		}
 		stripped[key] = val
 	}
-	for _, key := range BlacklistedUpdateFields {
+
+	blacklistedFields := BlacklistedUpdateFields
+	if obj.Type() == "ContentVersion" {
+		blacklistedFields = append(blacklistedFields, BlacklistedUpdateFieldsContentVersion...)
+	}
+	for _, key := range blacklistedFields {
 		delete(stripped, key)
 	}
 	return stripped

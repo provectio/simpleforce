@@ -66,6 +66,8 @@ var (
 		"FileType",
 		"ContentLocation",
 		"ContentModifiedDate",
+		"VersionData",
+		"IsMajorVersion",
 	}
 )
 

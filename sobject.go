@@ -37,6 +37,31 @@ var (
 		"ContactEmail",
 		"ClosedDate",
 		"LastModifiedById",
+
+		// Specific fields for 'ContentVersion' items
+		"Origin",
+		"ContentBodyId",
+		"PathOnClient",
+		"FirstPublishLocationId",
+		"PositiveRatingCount",
+		"ContentModifiedById",
+		"FeaturedContentBoost",
+		"RatingCount",
+		"Checksum",
+		"FileExtension",
+		"TextPreview",
+		"PublishStatus",
+		"NegativeRatingCount",
+		"IsAssetEnabled",
+		"NetworkId",
+		"ContentDocumentId",
+		"IsLatest",
+		"VersionNumber",
+		"IsMajorVersion",
+		"FeaturedContentDate",
+		"FileType",
+		"ContentLocation",
+		"ContentModifiedDate",
 	}
 )
 

@@ -266,9 +266,8 @@ func NewClient(url, clientID, apiVersion string) *Client {
 	}
 
 	// Remove trailing "/" from base url to prevent "//" when paths are appended
-	if strings.HasSuffix(client.baseURL, "/") {
-		client.baseURL = client.baseURL[:len(client.baseURL)-1]
-	}
+	client.baseURL = strings.TrimSuffix(client.baseURL, "/")
+
 	return client
 }
 
